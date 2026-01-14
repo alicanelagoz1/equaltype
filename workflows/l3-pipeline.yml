@@ -1,0 +1,123 @@
+name: L3 Pipeline (Discover → Curate → Promote → Regress)
+
+on:
+  workflow_dispatch:
+    inputs:
+      batches:
+        description: "Discovery batches"
+        required: false
+        default: "10"
+      per_batch:
+        description: "Candidates per batch"
+        required: false
+        default: "100"
+      max_promote:
+        description: "Max records to consider in promote"
+        required: false
+        default: "5000"
+  schedule:
+    - cron: "0 3 * * *" # every day 03:00 UTC
+
+concurrency:
+  group: l3-pipeline
+  cancel-in-progress: false
+
+jobs:
+  l3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL_DISCOVER: ${{ secrets.OPENAI_MODEL_DISCOVER }}
+      OPENAI_MODEL_CURATE: ${{ secrets.OPENAI_MODEL_CURATE }}
+      OPENAI_MODEL_CURATE_2: ${{ secrets.OPENAI_MODEL_CURATE_2 }}
+      # Ensure backend reads key if needed
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL_CURATE || 'gpt-4o-mini' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend deps
+        working-directory: apps/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # test tooling deps
+          pip install requests
+
+      - name: Start API (uvicorn)
+        working-directory: apps/backend
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
+          sleep 3
+
+      - name: Verify API health
+        run: |
+          curl -s http://127.0.0.1:8000/health | python -m json.tool
+
+      - name: L3.1 Discover candidates
+        working-directory: apps/backend
+        run: |
+          python tests/llm_discover.py \
+            --batches "${{ inputs.batches || '10' }}" \
+            --per-batch "${{ inputs.per_batch || '100' }}" \
+            --out tests/candidates_raw.jsonl
+
+      - name: L3.2 Auto-curate candidates
+        working-directory: apps/backend
+        run: |
+          python tests/llm_autocurate.py \
+            --in tests/candidates_raw.jsonl \
+            --out tests/candidates_curated.jsonl \
+            --min-confidence 0.75 \
+            --max-fp-risk 0.30 \
+            --max 200000
+
+      - name: L3.3 Promote (green only) + generate backlogs
+        working-directory: apps/backend
+        run: |
+          python tests/llm_promote.py \
+            --base-url http://127.0.0.1:8000 \
+            --in tests/candidates_curated.jsonl \
+            --cases tests/cases.json \
+            --max "${{ inputs.max_promote || '5000' }}"
+
+      - name: Regression (golden tests)
+        working-directory: apps/backend
+        run: |
+          python tests/run_cases.py \
+            --base-url http://127.0.0.1:8000 \
+            --cases tests/cases.json
+
+      - name: Upload artifacts (logs + backlogs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: l3-artifacts
+          path: |
+            apps/backend/uvicorn.log
+            apps/backend/tests/candidates_raw.jsonl
+            apps/backend/tests/candidates_curated.jsonl
+            apps/backend/tests/backlog_gaps.jsonl
+            apps/backend/tests/backlog_false_positives.jsonl
+            apps/backend/tests/cases.json
+
+      - name: Create PR with updated tests (optional)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(tests): auto-expand golden set via L3 pipeline"
+          title: "L3: Auto-expanded golden test set"
+          body: "Automated discovery/curation promoted green cases and updated golden set."
+          branch: "chore/l3-auto-tests"
+          delete-branch: true
+          add-paths: |
+            apps/backend/tests/cases.json
+            apps/backend/tests/backlog_gaps.jsonl
+            apps/backend/tests/backlog_false_positives.jsonl
