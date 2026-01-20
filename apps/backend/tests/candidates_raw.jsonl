@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
+
+from openai import OpenAI
+
+
+DISCOVERY_SYSTEM = """You generate candidate texts for an inclusive-language detector.
+
+Generate diverse, realistic short texts (1–2 sentences).
+Include categories:
+- dehumanization metaphors
+- exclusionary hiring/access statements
+- stereotypes/generalizations
+- microaggressions
+- ableist casual language
+- harassment / derogatory tone
+- neutral "clean" controls that are commonly mis-flagged (false-positive guards)
+
+Output MUST be valid JSON with this schema:
+{
+  "candidates": [
+    {
+      "category": "string",
+      "label": "problematic|clean",
+      "text": "string"
+    }
+  ]
+}
+
+Rules:
+- Do NOT include explicit instructions for wrongdoing.
+- You MAY include slurs only when necessary for robustness testing, but keep them minimal.
+- Prefer variety, not repetition.
+- Provide unique texts; avoid duplicates within the same batch.
+"""
+
+
+def get_client() -> OpenAI:
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    return OpenAI(api_key=key)
+
+
+def get_model() -> str:
+    return os.getenv("OPENAI_MODEL_DISCOVER", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+
+
+def call_discovery(client: OpenAI, n: int, seed_hint: str) -> List[Dict[str, Any]]:
+    prompt = f"""Generate {n} candidates. Use varied topics and phrasing.
+Make sure at least 25% are label="clean" false-positive guards.
+Seed hint: {seed_hint}
+"""
+    resp = client.responses.create(
+        model=get_model(),
+        input=[
+            {"role": "system", "content": DISCOVERY_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    out = getattr(resp, "output_text", None) or ""
+    try:
+        data = json.loads(out)
+    except Exception as e:
+        raise RuntimeError(f"Discovery returned non-JSON: {e}\nRaw (first 600): {out[:600]}")
+    cands = data.get("candidates")
+    if not isinstance(cands, list):
+        raise RuntimeError("Discovery JSON missing candidates[]")
+    # light sanitize
+    cleaned: List[Dict[str, Any]] = []
+    seen = set()
+    for c in cands:
+        if not isinstance(c, dict):
+            continue
+        text = c.get("text")
+        label = c.get("label")
+        cat = c.get("category", "unknown")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if label not in ("problematic", "clean"):
+            continue
+        t = text.strip()
+        if t in seen:
+            continue
+        seen.add(t)
+        cleaned.append({"category": str(cat), "label": label, "text": t})
+    return cleaned
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="LLM discovery: generate candidate texts")
+    ap.add_argument("--out", default="tests/candidates_raw.jsonl", help="Output JSONL path")
+    ap.add_argument("--batches", type=int, default=10, help="Number of batches")
+    ap.add_argument("--per-batch", type=int, default=50, help="Candidates per batch")
+    args = ap.parse_args()
+
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    client = get_client()
+
+    total = 0
+    with out_path.open("a", encoding="utf-8") as f:
+        for i in range(args.batches):
+            seed_hint = f"{datetime.utcnow().isoformat()} batch={i}"
+            cands = call_discovery(client, args.per_batch, seed_hint)
+            for c in cands:
+                rec = {
+                    "id": f"cand_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}_{total}",
+                    "created_at": datetime.utcnow().isoformat() + "Z",
+                    **c,
+                }
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                total += 1
+
+    print(f"Wrote {total} candidates to {out_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

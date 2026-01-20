@@ -1,0 +1,25 @@
+language: lv
+rules:
+  - id: lv_gendered_001
+    category: gender
+    severity: high
+    description: "Gendered derogatory language"
+    patterns:
+      - "\\besi vīrietis\\b"
+      - "\\buzvedies kā vīrietis\\b"
+    suggestions:
+      - "esi cieņpilns"
+      - "esi profesionāls"
+      - "esi pieklājīgs"
+
+  - id: lv_ableist_001
+    category: disability
+    severity: medium
+    description: "Ableist language"
+    patterns:
+      - "\\bstulbs\\b"
+      - "\\btraks\\b"
+    suggestions:
+      - "nepieņemami"
+      - "aizvainojoši"
+      - "problemātiski"

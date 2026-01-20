@@ -1,0 +1,26 @@
+language: en
+rules:
+  - id: en_gendered_insult_001
+    category: gender
+    severity: high
+    description: "Gendered derogatory language"
+    patterns:
+      - "\\bact like a man\\b"
+      - "\\bman up\\b"
+    suggestions:
+      - "be respectful"
+      - "be professional"
+      - "be considerate"
+
+  - id: en_ableist_001
+    category: disability
+    severity: medium
+    description: "Ableist language"
+    patterns:
+      - "\\bcrippled by\\b"
+      - "\\binsane\\b"
+      - "\\bcrazy\\b"
+    suggestions:
+      - "overwhelmed"
+      - "unreasonable"
+      - "unacceptable"

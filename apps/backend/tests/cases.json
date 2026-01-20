@@ -1,0 +1,326 @@
+{
+  "version": "0.1",
+  "notes": "Golden test set for EqualType /api/analyze. Expectations are intentionally high-level to tolerate LLM variance while catching regressions.",
+  "cases": [
+    {
+      "id": "clean_001",
+      "text": "Our team welcomes people from all backgrounds and experiences.",
+      "expected": {
+        "is_clean": true,
+        "min_items": 0,
+        "copy_allowed": true
+      }
+    },
+    {
+      "id": "clean_002",
+      "text": "Please share any accessibility needs so we can support you.",
+      "expected": {
+        "is_clean": true,
+        "min_items": 0,
+        "copy_allowed": true
+      }
+    },
+    {
+      "id": "slur_001_n_word",
+      "text": "A large portion of New Orleans’ population is nigger.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_contain_original": [
+          "nigger"
+        ],
+        "must_have_severity": [
+          "block"
+        ]
+      }
+    },
+    {
+      "id": "slur_002_f_word",
+      "text": "Those faggots should not be allowed in public.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_contain_original": [
+          "faggots"
+        ],
+        "must_have_severity": [
+          "block"
+        ]
+      }
+    },
+    {
+      "id": "dehumanize_001",
+      "text": "Immigrants are vermin and an infestation.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_have_severity": [
+          "block"
+        ],
+        "must_have_type_any_of": [
+          "hate",
+          "other"
+        ]
+      }
+    },
+    {
+      "id": "dehumanize_002",
+      "text": "These people are animals and should be treated like animals.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_have_severity": [
+          "block"
+        ]
+      }
+    },
+    {
+      "id": "stereotype_001_gender_leadership",
+      "text": "Women are too emotional to be good leaders.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ],
+        "must_have_type_any_of": [
+          "stereotype",
+          "exclusion"
+        ]
+      }
+    },
+    {
+      "id": "stereotype_002_age_tech",
+      "text": "Older people can’t understand technology.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ],
+        "must_have_type_any_of": [
+          "stereotype"
+        ]
+      }
+    },
+    {
+      "id": "stereotype_003_nationality",
+      "text": "People from that country are lazy and unreliable.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "exclusion_001_hiring_only_men",
+      "text": "We are hiring: only men should apply for this role.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ],
+        "must_have_type_any_of": [
+          "exclusion"
+        ]
+      }
+    },
+    {
+      "id": "exclusion_002_no_wheelchairs",
+      "text": "This event is not suitable for wheelchair users.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ],
+        "must_have_type_any_of": [
+          "exclusion",
+          "other"
+        ]
+      }
+    },
+    {
+      "id": "microaggression_001_really_from",
+      "text": "Where are you really from?",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "info",
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "microaggression_002_good_english",
+      "text": "You speak good English for someone from your background.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn",
+          "info"
+        ]
+      }
+    },
+    {
+      "id": "ableism_001_crazy",
+      "text": "This idea is crazy and anyone who supports it is insane.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "info",
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "ableism_002_lame",
+      "text": "That excuse is lame.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "info",
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "religion_001_generalization",
+      "text": "All Muslims are dangerous.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_have_severity": [
+          "block",
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "religion_002_generalization",
+      "text": "Christians are all hypocrites.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "gender_identity_001",
+      "text": "Trans people are not real women.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": false,
+        "must_have_severity": [
+          "block",
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "race_001_indirect",
+      "text": "We need to keep the neighborhood clean; too many of them are moving in.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "workplace_001_boys_club",
+      "text": "This team needs a strong man to lead it.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "tone_001_demeaning",
+      "text": "Stop whining and man up.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn",
+          "info"
+        ]
+      }
+    },
+    {
+      "id": "context_001_medical_neutral",
+      "text": "The patient was diagnosed with diabetes and needs ongoing care.",
+      "expected": {
+        "is_clean": true,
+        "min_items": 0,
+        "copy_allowed": true
+      }
+    },
+    {
+      "id": "context_002_disability_preferred",
+      "text": "She is wheelchair-bound and can’t do much on her own.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 1,
+        "copy_allowed": true,
+        "must_have_severity": [
+          "warn"
+        ]
+      }
+    },
+    {
+      "id": "mixed_001_two_issues",
+      "text": "Women are too emotional to be leaders, and immigrants are an infestation.",
+      "expected": {
+        "is_clean": false,
+        "min_items": 2,
+        "copy_allowed": false,
+        "must_have_severity": [
+          "warn",
+          "block"
+        ]
+      }
+    },
+    {
+      "id": "clean_003_policy",
+      "text": "We do not tolerate harassment or discrimination of any kind.",
+      "expected": {
+        "is_clean": true,
+        "min_items": 0,
+        "copy_allowed": true
+      }
+    }
+  ]
+}

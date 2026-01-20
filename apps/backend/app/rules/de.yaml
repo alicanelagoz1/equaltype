@@ -1,0 +1,26 @@
+language: de
+rules:
+  - id: de_gendered_001
+    category: gender
+    severity: high
+    description: "Gendered derogatory language"
+    patterns:
+      - "\\bsei ein Mann\\b"
+      - "\\bstell dich nicht so an\\b"
+    suggestions:
+      - "bleib respektvoll"
+      - "bleib professionell"
+      - "bleib sachlich"
+
+  - id: de_ableist_001
+    category: disability
+    severity: medium
+    description: "Ableist language"
+    patterns:
+      - "\\bbehindert\\b"
+      - "\\bkrank\\b"
+      - "\\birre\\b"
+    suggestions:
+      - "unangemessen"
+      - "nicht akzeptabel"
+      - "problematisch"
