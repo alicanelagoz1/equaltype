@@ -2,11 +2,18 @@
   --background: #FFDEF0;
   --foreground: #171717;
 
-  /* Desktop’ta kontrollü genişlik */
+  /* Desktop layout */
   --site-max: 1180px;
   --site-pad: 64px;
 
   --brand-green: #1B8900;
+
+  /* Fluid type scale (mobile safe, desktop unchanged) */
+  --fs-1: clamp(14px, 3.6vw, 16px);
+  --fs-2: clamp(16px, 4vw, 18px);
+  --fs-3: clamp(20px, 5vw, 24px);
+  --fs-4: clamp(28px, 7vw, 40px);
+  --lh: 1.5;
 }
 
 html, body{
@@ -23,6 +30,8 @@ body{
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: var(--fs-1);
+  line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -33,7 +42,16 @@ a{
   text-decoration: none;
 }
 
-/* Fonts */
+/* Prevent iOS zoom on focus */
+input,
+textarea{
+  font-size: clamp(16px, 3.6vw, 18px);
+}
+
+/* -------------------------------------------------------
+   FONTS
+------------------------------------------------------- */
+
 @font-face{
   font-family:"Seatren";
   src:url("/fonts/Seatren.woff") format("woff");
@@ -41,6 +59,7 @@ a{
   font-style:normal;
   font-display:swap;
 }
+
 @font-face{
   font-family:"Hanken Grotesk";
   src:url("/fonts/HankenGrotesk-Regular.ttf") format("truetype");
@@ -48,6 +67,7 @@ a{
   font-style:normal;
   font-display:swap;
 }
+
 @font-face{
   font-family:"Hanken Grotesk";
   src:url("/fonts/HankenGrotesk-Bold.ttf") format("truetype");
@@ -57,17 +77,17 @@ a{
 }
 
 /* -------------------------------------------------------
-   GLOBAL SITE LAYOUT (HER SAYFADA AYNI)
+   GLOBAL SITE LAYOUT
 ------------------------------------------------------- */
 
 .siteWrap{
   position: relative;
-  overflow-x: hidden;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
-/* Header/Main/Footer content hep aynı container genişliğinde */
 .siteContainer{
   width: 100%;
   max-width: var(--site-max);
@@ -80,15 +100,10 @@ a{
 
 .siteMain{
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
-
-
-
-.siteWrap{min-height:100dvh;display:flex;flex-direction:column;}
-.siteMain{flex:1;min-height:0;display:flex;flex-direction:column;}
-
 
 /* -------------------------------------------------------
    HEADER
@@ -117,19 +132,12 @@ a{
   font-family:"Hanken Grotesk", system-ui, -apple-system, Segoe UI, Arial;
   font-size:14px;
   color:#111;
-  text-decoration:none;
 }
 
 .navLink.active{
   font-weight:700;
   text-decoration: underline;
   text-underline-offset: 4px;
-}
-
-.siteMain{
-  flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 
 /* -------------------------------------------------------
@@ -158,7 +166,7 @@ a{
 }
 
 /* -------------------------------------------------------
-   BACKGROUND LAYERS (full width, asla container’a baglanmaz)
+   BACKGROUND LAYERS
 ------------------------------------------------------- */
 
 .bgLayer{
@@ -176,7 +184,7 @@ a{
 }
 
 /* -------------------------------------------------------
-   HOME PAGE SPACING (hero bloğunu aşağı al)
+   HOME
 ------------------------------------------------------- */
 
 .homeHero{
@@ -184,7 +192,6 @@ a{
   padding-bottom: 24px;
 }
 
-/* Text area satırı + copy */
 .typeLine{
   position: relative;
   padding: 8px 12px 10px;
@@ -222,50 +229,128 @@ textarea.input{
   cursor: not-allowed;
 }
 
+/* -------------------------------------------------------
+   ABOUT
+------------------------------------------------------- */
+
+.aboutSection{
+  max-width:1100px;
+  margin:0 auto;
+  padding:48px 64px 72px;
+  display:flex;
+  flex-direction:column;
+  gap:28px;
+}
+
+.aboutTop{
+  display:grid;
+  grid-template-columns:439px 1fr;
+  gap:28px;
+  align-items:start;
+}
+
+.aboutImg{
+  width:100%;
+  height:300px;
+  border-radius:5px;
+  overflow:hidden;
+  background:#eee;
+  display:block;
+  object-fit:cover;
+}
+
+.aboutTopText h3{
+  font-family:"Hanken Grotesk";
+  font-weight:600;
+  font-size:36px;
+  line-height:47px;
+  margin-bottom:12px;
+}
+
+.aboutTopText p{
+  font-family:"Hanken Grotesk";
+  font-size:18px;
+  line-height:23px;
+}
+
+.aboutGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+}
+
+.aboutCardPink{
+  background:#fff;
+  border-radius:5px 0 0 5px;
+  padding:28px;
+}
+
+.aboutCardGray{
+  background:#F5F5F5;
+  border-radius:0 5px 0 5px;
+  padding:36px;
+}
+
+/* -------------------------------------------------------
+   RESPONSIVE (TABLET & MOBILE ONLY)
+------------------------------------------------------- */
+
 @media (max-width: 960px){
-  :root{
-    --site-pad: 22px;
+  :root{ --site-pad: 22px; }
+}
+
+@media (max-width: 768px){
+
+  .siteHeader{
+    height: 72px;
+  }
+
+  .logo{
+    width: 150px;
+  }
+
+  .nav{
+    gap:12px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  .navLink{
+    font-size:13px;
+  }
+
+  .homeHero{
+    padding-top: 28px;
+    padding-bottom: 16px;
+  }
+
+  /* Editor mobile layout */
+  textarea.input{
+    padding-right: 12px;
+  }
+
+  .copyBtn{
+    position: static;
+    margin-top: 10px;
+    width: 100%;
+    justify-content: center;
+    border-top: 1px solid rgba(0,0,0,.12);
+    padding: 10px 8px;
+  }
+
+  /* About */
+  .aboutSection{
+    padding:32px 22px 56px;
+  }
+
+  .aboutTop{
+    grid-template-columns:1fr;
+  }
+
+  .aboutImg{
+    height:320px;
+  }
+
+  .aboutGrid{
+    grid-template-columns:1fr;
   }
 }
-
-/* ABOUT – hero after section */
-.aboutSection{max-width:1100px;margin:0 auto;padding:48px 64px 72px;display:flex;flex-direction:column;gap:28px;}
-.aboutTop{display:grid;grid-template-columns:439px 1fr;gap:28px;align-items:start;}
-.aboutImg{width:100%;height:300px;border-radius:5px;overflow:hidden;background:#eee;display:block;object-fit:cover;}
-.aboutTopText h3{font-family:"Hanken Grotesk",system-ui;font-weight:600;font-size:36px;line-height:47px;color:#000;margin:0 0 12px;}
-.aboutTopText p{font-family:"Hanken Grotesk",system-ui;font-weight:400;font-size:18px;line-height:23px;color:#000;margin:0 0 10px;}
-.aboutGrid{display:grid;grid-template-columns:1fr 1fr;}
-.aboutCardPink{background:#ffffff;border-radius:5px 0px 0px 5px;padding:28px;}
-.aboutCardGray{background:#F5F5F5;border-radius:0px 5px 0px 5px;padding:36px;}
-.aboutCardTitle{font-family:"Hanken Grotesk",system-ui;font-weight:600;font-size:36px;line-height:47px;color:#1B8900;margin:0 0 14px;}
-.aboutCardBody{font-family:"Hanken Grotesk",system-ui;font-weight:400;font-size:18px;line-height:23px;color:#000;margin:0;}
-.aboutCardSubB{font-family:"Hanken Grotesk",system-ui;font-weight:600;font-size:22px;line-height:23px;color:#000;margin:0 0 5;}
-.aboutSupport{margin-top:6px;}
-.aboutSupport h3{font-family:"Hanken Grotesk",system-ui;font-weight:700;font-size:24px;line-height:31px;color:#000;margin:0 0 10px;}
-.aboutSupport p{font-family:"Hanken Grotesk",system-ui;font-weight:400;font-size:16px;line-height:22px;color:#000;margin:0 0 18px;max-width:720px;}
-.aboutSupportRow{display:grid;grid-template-columns:358px 1fr;gap:18px;}
-.supportCardGreen{background:#1B8900;border-radius:5px;padding:30px;}
-.supportCardYellow{background:#FEEB88;border-radius:5px;padding:20px;}
-.supportTitle{font-family:"Hanken Grotesk";font-weight:600;font-size:24px;line-height:31px;margin:0 0 10px; color: #fff;}
-.supportBody{font-family:"Hanken Grotesk";font-weight:600;font-size:16px;line-height:22px;margin:0; color: #ffffff;}
-.supportTitleLight{color:#fff;}
-.supportBodyLight{color:#fff;}
-.supportTitleDark{color:#000000;}
-.supportBodyDark{color:#ffffff;}
-.supportCardGreen p {
-  color: #fff;
-}
-
-.supportCardGreen strong,
-.supportCardGreen b {
-  color: #fff;
-}
-.supportEmail{display:inline-block;margin-top:10px;font-family:"Hanken Grotesk",system-ui;font-weight:500;font-size:18px;line-height:23px;color:#1B8900;text-decoration:none;}
-@media (max-width: 960px){
-  .aboutSection{padding:32px 22px 56px;}
-  .aboutTop{grid-template-columns:1fr;}
-  .aboutImg{height:320px;}
-  .aboutGrid{grid-template-columns:1fr;}
-  .aboutSupportRow{grid-template-columns:1fr;}
-}
-

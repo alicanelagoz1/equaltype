@@ -280,6 +280,16 @@ export default function Page() {
   const debounceRef = useRef<number | null>(null);
   const maxWaitRef = useRef<number | null>(null);
 
+  // Mobile detection (desktop functionality unchanged)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
+
   function scheduleAnalyze(input: string) {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => analyze(input), 550);
@@ -379,8 +389,10 @@ export default function Page() {
   }, [findings, activeId]);
 
   // Compute popup anchor (position above the highlighted span)
+  // Desktop uses anchored popup. Mobile uses bottom-sheet CSS.
   useEffect(() => {
     if (!activeId) return;
+    if (isMobile) return;
 
     const root = displayRef.current;
     const wrap = wrapRef.current;
@@ -398,7 +410,7 @@ export default function Page() {
     const y = lineRect.top - wrapRect.top;
 
     setAnchor({ x, y });
-  }, [activeId, findings]);
+  }, [activeId, findings, isMobile]);
 
   function applyReplace(f: UIFinding) {
     if (f.type !== "replace") return;
@@ -447,7 +459,14 @@ export default function Page() {
   }
 
   const popupStyle = useMemo(() => {
-    if (!anchor || !active) return { display: "none" as const };
+    if (!active) return { display: "none" as const };
+
+    // Mobile: bottom-sheet handled by CSS (.popupSheet)
+    if (isMobile) {
+      return { display: "block" as const };
+    }
+
+    if (!anchor) return { display: "none" as const };
 
     const bubbleW = 360;
     const wrapW = wrapRef.current?.clientWidth || bubbleW;
@@ -466,13 +485,38 @@ export default function Page() {
       transform: "translateY(-100%)",
       ["--arrow-left" as any]: `${arrowLeft}px`,
     };
-  }, [anchor, active]);
+  }, [anchor, active, isMobile]);
 
   async function onCopy() {
     try {
       await navigator.clipboard.writeText(text);
     } catch {}
   }
+
+    // iOS / mobile keyboard: real viewport height -> CSS var
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const setAppH = () => {
+      const h = window.visualViewport?.height || window.innerHeight;
+      document.documentElement.style.setProperty("--app-h", `${Math.round(h)}px`);
+    };
+
+    setAppH();
+
+    window.addEventListener("resize", setAppH);
+    window.addEventListener("orientationchange", setAppH);
+    window.visualViewport?.addEventListener("resize", setAppH);
+    window.visualViewport?.addEventListener("scroll", setAppH);
+
+    return () => {
+      window.removeEventListener("resize", setAppH);
+      window.removeEventListener("orientationchange", setAppH);
+      window.visualViewport?.removeEventListener("resize", setAppH);
+      window.visualViewport?.removeEventListener("scroll", setAppH);
+    };
+  }, []);
+
 
   return (
     <div className="page">
@@ -488,7 +532,6 @@ export default function Page() {
         .subtitle{font-family:"Hanken Grotesk",system-ui,-apple-system,Segoe UI,Arial;font-size:36px;margin:18px 0 0;max-width:900px;color:#111;}
         .subtitle b{font-weight:800;}
         .siteWrap{min-height:100dvh;display:flex;flex-direction:column;}
-
 
         .editorWrap{position:relative;margin:22px 0 0;width:100%;max-width:820px;}
         .typeLine{position:relative;padding:0;margin:0;width:100%;}
@@ -516,12 +559,100 @@ export default function Page() {
         .copyBtn{position:absolute;right:0;bottom:-40px;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:transparent;cursor:pointer;opacity:.9;}
         .copyBtn img{width:22px;height:22px;display:block;}
         .copyDisabled{opacity:.35;cursor:not-allowed;}
+
+        /* ------------------------------
+           MOBILE OVERRIDES (desktop-safe)
+        ------------------------------ */
+        @media (max-width: 768px){
+          .page{ overflow-y:auto; min-height: var(--app-h, 100dvh); }
+          .container{ padding: 18px 16px 28px; }
+          
+
+          .hero{ margin-top: 10px; }
+          .title{
+            font-size: clamp(34px, 9vw, 46px);
+            margin: 16px 0 0;
+          }
+          .subtitle{
+            font-size: clamp(18px, 4.6vw, 22px);
+            margin-top: 12px;
+            line-height: 1.25;
+          }
+
+          .editorWrap{
+            max-width: 100%;
+            margin-top: 16px;
+          }
+
+          .display{
+            font-size: 18px;
+            line-height: 1.35;
+          }
+          textarea.input{
+            font-size: 18px;
+            line-height: 1.35;
+            textarea.input{ min-height: calc(var(--app-h, 100dvh) * 0.38); }
+
+          }
+
+          .copyBtn{
+            position: static;
+            width: 100%;
+            height: 42px;
+            margin-top: 10px;
+            border-top: 1px solid rgba(0,0,0,0.12);
+          }
+
+          .baseline{ margin-top: 12px; }
+
+          .popup.popupSheet{
+            position: fixed !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            top: auto !important;
+            width: 100% !important;
+            transform: none !important;
+
+            border-radius: 16px 16px 0 0;
+            padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+            max-height: calc(var(--app-h, 100dvh) * 0.62);
+            overflow: auto;
+
+            z-index: 9999;
+          }
+
+          .popupTop{
+            flex-direction: column;
+            gap: 10px;
+          }
+
+          .popupWord{
+            max-width: 100%;
+            font-size: 15px;
+          }
+
+          .btnRow{
+            width: 100%;
+            gap: 10px;
+          }
+
+          .btnPrimary,
+          .btnSecondary{
+            width: 50%;
+            padding: 12px 10px;
+          }
+
+          .blockedMsg{
+            font-size: 14px;
+            line-height: 1.35;
+          }
+        }
       `}</style>
 
       <div className="loopBg" />
 
       <div className="container">
-
         <div className="hero">
           <h1 className="title">Write better for everyone</h1>
           <p className="subtitle">
@@ -533,7 +664,10 @@ export default function Page() {
 
         <div className="editorWrap" ref={wrapRef}>
           {active && (
-            <div className="popup" style={popupStyle}>
+            <div
+              className={`popup ${isMobile ? "popupSheet" : ""}`}
+              style={isMobile ? undefined : (popupStyle as any)}
+            >
               <div className="popupTop">
                 <div className="popupWord">
                   {active.message ||
@@ -573,7 +707,7 @@ export default function Page() {
 
               {active.type === "avoid" && <div className="popupMsg">{active.message}</div>}
 
-              <div className="popupArrow" />
+              {!isMobile && <div className="popupArrow" />}
             </div>
           )}
 
@@ -583,6 +717,16 @@ export default function Page() {
             <textarea
               className="input"
               value={text}
+                            onFocus={() => {
+                // On mobile: keep editor visible when keyboard opens
+                if (typeof window === "undefined") return;
+                if (!isMobile) return;
+
+                window.setTimeout(() => {
+                  typeLineRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+                }, 150);
+              }}
+
               onChange={(e) => {
                 const next = e.target.value;
                 const prev = lastTextRef.current;
