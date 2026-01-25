@@ -399,7 +399,7 @@ export default function Page() {
   }, [findings, activeId]);
 
   // Compute popup anchor (position above the highlighted span)
-  // Desktop uses anchored popup. Mobile uses bottom-sheet CSS.
+  // Desktop uses anchored popup. Mobile no longer uses popup.
   useEffect(() => {
     if (!activeId) return;
     if (isMobile) return;
@@ -505,11 +505,7 @@ export default function Page() {
 
   const popupStyle = useMemo(() => {
     if (!active) return { display: "none" as const };
-
-    // Mobile: bottom-sheet handled by CSS (.popupSheet)
-    if (isMobile) {
-      return { display: "block" as const };
-    }
+    if (isMobile) return { display: "none" as const }; // mobile popup disabled
 
     if (!anchor) return { display: "none" as const };
 
@@ -604,130 +600,129 @@ export default function Page() {
         .copyBtn img{width:22px;height:22px;display:block;}
         .copyDisabled{opacity:.35;cursor:not-allowed;}
 
-/* -------------------------------------------------------
-   MOBILE TYPO + EDITOR POLISH (desktop unchanged)
-------------------------------------------------------- */
-@media (max-width: 560px){
-  .container{
-    padding: 18px 22px 22px; /* mobilde daha dengeli */
-  }
+        /* Inline result panel (mobile only) */
+        .inlinePanel{
+          margin-top: 14px;
+          background: #fff;
+          border: 1px solid rgba(17,17,17,0.12);
+          border-radius: 14px;
+          padding: 14px;
+          box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+        }
+        .inlineTop{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:12px;
+        }
+        .inlineWord{
+          font-family:"Hanken Grotesk",system-ui,-apple-system,Segoe UI,Arial;
+          font-size:14px;
+          line-height:1.3;
+          font-weight:800;
+          color:#111;
+          flex:1;
+          min-width: 0;
+        }
+        .inlineActions{
+          display:flex;
+          gap:10px;
+          flex-shrink:0;
+        }
+        .inlineMsg{
+          margin-top:8px;
+          font-family:"Hanken Grotesk",system-ui;
+          font-size:14px;
+          color:#222;
+        }
 
-  /* TYPO */
-  .title{
-    font-size: 48px;
-    line-height: 1.02;
-    letter-spacing: -0.3px;
-    margin-top: 26px; /* başlığı biraz aşağı oturt */
-  }
-
-  .subtitle{
-    font-size: 24px;
-    line-height: 1.28;
-    margin-top: 14px;
-    max-width: 520px;
-  }
-
-  /* EDITOR */
-  .editorWrap{
-    margin-top: 18px;
-    max-width: 100%;
-  }
-
-  /* Display layer + textarea aynı font-size olmalı */
-  .display{
-    font-size: 24px;
-    line-height: 1.35;
-  }
-
-  textarea.input{
-    font-size: 24px;
-    line-height: 1.35;
-    min-height: 84px;          /* mobilde yazma alanı biraz daha rahat */
-    padding-right: 64px;       /* copy butona yer aç */
-  }
-
-  /* Placeholder ayrı: 18px */
-  textarea.input::placeholder{
-    font-size: 18px;
-    line-height: 1.25;
-    opacity: 0.45;
-  }
-
-  /* Baseline spacing */
-  .baseline{
-    margin-top: 12px;
-  }
-
-  /* COPY BUTTON - mobilde daha “buton gibi” ve düzgün konum */
-  .copyBtn{
-    right: 6px;
-    bottom: -46px;             /* senin “aşağıda kalması” hoşuna gitti, ama hizayı iyileştiriyoruz */
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    border: 1px solid rgba(17,17,17,0.18);
-    background: rgba(255,255,255,0.35);
-    backdrop-filter: blur(6px);
-    opacity: 1;
-  }
-
-  .copyBtn img{
-    width: 22px;
-    height: 22px;
-  }
-
-  /* Blocked msg mobil okunurluk */
-  .blockedMsg{
-    font-size: 14px;
-    line-height: 1.35;
-    margin-top: 14px;
-    max-width: 520px;
-  }
-}
-
-          .baseline{ margin-top: 12px; }
-
-          .popup.popupSheet{
-            position: fixed !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            top: auto !important;
-            width: 100% !important;
-            transform: none !important;
-
-            border-radius: 16px 16px 0 0;
-            padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
-            max-height: calc(var(--app-h, 100dvh) * 0.62);
-            overflow: auto;
-
-            z-index: 9999;
+        /* -------------------------------------------------------
+           MOBILE TYPO + EDITOR POLISH (desktop unchanged)
+        ------------------------------------------------------- */
+        @media (max-width: 560px){
+          .container{
+            padding: 18px 22px 22px;
           }
 
-          .popupTop{
-            flex-direction: column;
-            gap: 10px;
+          /* TYPO */
+          .title{
+            font-size: 48px;
+            line-height: 1.02;
+            letter-spacing: -0.3px;
+            margin-top: 26px;
           }
 
-          .popupWord{
+          .subtitle{
+            font-size: 24px;
+            line-height: 1.28;
+            margin-top: 14px;
+            max-width: 520px;
+          }
+
+          /* EDITOR */
+          .editorWrap{
+            margin-top: 18px;
             max-width: 100%;
-            font-size: 15px;
           }
 
-          .btnRow{
-            width: 100%;
-            gap: 10px;
+          .display{
+            font-size: 24px;
+            line-height: 1.35;
           }
 
-          .btnPrimary,
-          .btnSecondary{
-            width: 50%;
-            padding: 12px 10px;
+          textarea.input{
+            font-size: 24px;
+            line-height: 1.35;
+            min-height: 84px;
+            padding-right: 64px;
+          }
+
+          textarea.input::placeholder{
+            font-size: 18px;
+            line-height: 1.25;
+            opacity: 0.45;
+          }
+
+          .baseline{
+            margin-top: 12px;
+          }
+
+          .copyBtn{
+            right: 6px;
+            bottom: -46px;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            border: 1px solid rgba(17,17,17,0.18);
+            background: rgba(255,255,255,0.35);
+            backdrop-filter: blur(6px);
+            opacity: 1;
+          }
+
+          .copyBtn img{
+            width: 22px;
+            height: 22px;
           }
 
           .blockedMsg{
             font-size: 14px;
             line-height: 1.35;
+            margin-top: 14px;
+            max-width: 520px;
+          }
+
+          /* Inline panel actions: allow wrap on very small screens */
+          .inlineTop{
+            flex-direction: column;
+            gap: 10px;
+          }
+          .inlineActions{
+            width:100%;
+          }
+          .inlineActions .btnPrimary,
+          .inlineActions .btnSecondary{
+            width: 50%;
+            padding: 12px 10px;
           }
         }
       `}</style>
@@ -745,8 +740,9 @@ export default function Page() {
         </div>
 
         <div className="editorWrap" ref={wrapRef}>
-          {active && (
-            <div className={`popup ${isMobile ? "popupSheet" : ""}`} style={isMobile ? undefined : (popupStyle as any)}>
+          {/* DESKTOP ONLY: keep existing popup behavior and visuals unchanged */}
+          {!isMobile && active && (
+            <div className="popup" style={popupStyle as any}>
               <div className="popupTop">
                 <div className="popupWord">
                   {active.message ||
@@ -788,7 +784,7 @@ export default function Page() {
                 <div className="popupMsg">Inclusive language focuses on ability and behavior, not gender.</div>
               )}
 
-              {!isMobile && <div className="popupArrow" />}
+              <div className="popupArrow" />
             </div>
           )}
 
@@ -799,7 +795,6 @@ export default function Page() {
               className="input"
               value={text}
               onFocus={() => {
-                // On mobile: keep editor visible when keyboard opens
                 if (typeof window === "undefined") return;
                 if (!isMobile) return;
 
@@ -811,7 +806,7 @@ export default function Page() {
                 const next = e.target.value;
                 const prev = lastTextRef.current;
 
-                // NEW: user started editing again -> unlock analysis
+                // user started editing again -> unlock analysis
                 if (locked) setLocked(false);
 
                 setText(next);
@@ -852,7 +847,54 @@ export default function Page() {
             <div className="baseline" />
           </div>
 
-          {blockedMessage && <div className="blockedMsg">{blockedMessage}</div>}
+          {/* MOBILE ONLY: inline result panel under the editor */}
+          {isMobile && active && (
+            <div className="inlinePanel">
+              <div className="inlineTop">
+                <div className="inlineWord">
+                  {active.message ||
+                    (active.type === "replace"
+                      ? "We strongly suggest changing this word to a neutral term."
+                      : "We suggest not using this sentence.")}
+                </div>
+
+                <div className="inlineActions">
+                  {active.type === "replace" ? (
+                    <>
+                      <button className="btnPrimary" onClick={() => applyReplace(active)}>
+                        Apply suggestion
+                      </button>
+                      <button className="btnSecondary" onClick={keepReplace}>
+                        Keep original
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btnPrimary" onClick={acceptAvoid}>
+                        Remove sentence
+                      </button>
+                      <button className="btnSecondary" onClick={rejectAvoid}>
+                        Keep sentence
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {active.type === "replace" && (
+                <div className="inlineMsg">
+                  Suggested: <b>{(active.replacement ?? "").trim() || "(neutral alternative)"}</b>
+                </div>
+              )}
+
+              {active.type === "avoid" && (
+                <div className="inlineMsg">Inclusive language focuses on ability and behavior, not gender.</div>
+              )}
+            </div>
+          )}
+
+          {/* Keep existing blockedMessage behavior; avoid double messaging when mobile panel is visible */}
+          {blockedMessage && (!isMobile || !active) && <div className="blockedMsg">{blockedMessage}</div>}
         </div>
       </div>
     </div>
