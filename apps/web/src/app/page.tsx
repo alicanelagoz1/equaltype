@@ -267,6 +267,9 @@ export default function Page() {
   const [copyEnabled, setCopyEnabled] = useState<boolean>(true);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
+  // NEW: lock prevents recursive re-analysis after user makes a decision
+  const [locked, setLocked] = useState<boolean>(false);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const displayRef = useRef<HTMLDivElement | null>(null);
   const typeLineRef = useRef<HTMLDivElement | null>(null);
@@ -280,6 +283,9 @@ export default function Page() {
   const debounceRef = useRef<number | null>(null);
   const maxWaitRef = useRef<number | null>(null);
 
+  // NEW: allow exactly one analyze even if locked (used after Replace)
+  const forcedAnalyzeOnceRef = useRef<boolean>(false);
+
   // Mobile detection (desktop functionality unchanged)
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -291,6 +297,8 @@ export default function Page() {
   }, []);
 
   function scheduleAnalyze(input: string) {
+    if (locked) return;
+
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => analyze(input), 550);
 
@@ -307,6 +315,8 @@ export default function Page() {
   const highlightedHTML = useMemo(() => buildHighlightedHTML(text, findings), [text, findings]);
 
   async function analyze(input: string) {
+    if (locked && !forcedAnalyzeOnceRef.current) return;
+
     const seq = ++scanSeqRef.current;
 
     if (!input.trim()) {
@@ -371,6 +381,9 @@ export default function Page() {
       setActiveId(null);
       setCopyEnabled(false);
       setBlockedMessage(`Request failed: ${e?.message || String(e)}`);
+    } finally {
+      // if we used the forced path once, consume it
+      if (forcedAnalyzeOnceRef.current) forcedAnalyzeOnceRef.current = false;
     }
   }
 
@@ -380,10 +393,7 @@ export default function Page() {
     if (activeId) return;
     if (!findings.length) return;
 
-    const candidate =
-      findings.find((f) => f.type === "avoid") ||
-      findings.find((f) => f.type === "replace") ||
-      findings[0];
+    const candidate = findings.find((f) => f.type === "avoid") || findings.find((f) => f.type === "replace") || findings[0];
 
     if (candidate) setActiveId(candidate.id);
   }, [findings, activeId]);
@@ -404,13 +414,35 @@ export default function Page() {
 
     const markRect = el.getBoundingClientRect();
     const wrapRect = wrap.getBoundingClientRect();
-    const lineRect = typeLine.getBoundingClientRect();
+    const lineRect = typeLineRef.current?.getBoundingClientRect() || typeLine.getBoundingClientRect();
 
     const x = markRect.left + markRect.width / 2 - wrapRect.left;
     const y = lineRect.top - wrapRect.top;
 
     setAnchor({ x, y });
   }, [activeId, findings, isMobile]);
+
+  // NEW: smart single-space join so replacement doesn't stick to next word
+  function joinWithSmartSpace(before: string, replacement: string, after: string) {
+    const rep = replacement; // caller already trims
+    if (!rep) return before + after;
+
+    // If after begins with whitespace or punctuation, do not add space
+    const afterFirst = after.slice(0, 1);
+    const afterStartsSpace = /^\s$/.test(afterFirst) || after.startsWith("\n") || after.startsWith("\t");
+    const afterStartsPunct = /^[,.;:!?)]$/.test(afterFirst);
+
+    // If replacement already ends with whitespace, do not add
+    const repEndsSpace = /\s$/.test(rep);
+
+    // Add exactly one space if: replacement ends with a word char AND after starts with a word char (and no space already)
+    const repEndsWord = /[A-Za-z0-9)]$/.test(rep);
+    const afterStartsWord = /^[A-Za-z0-9(]$/.test(afterFirst);
+
+    const needsSpace = !repEndsSpace && !afterStartsSpace && !afterStartsPunct && repEndsWord && afterStartsWord;
+
+    return before + rep + (needsSpace ? " " : "") + after;
+  }
 
   function applyReplace(f: UIFinding) {
     if (f.type !== "replace") return;
@@ -425,7 +457,7 @@ export default function Page() {
 
     const before = text.slice(0, f.start);
     const after = text.slice(f.end);
-    const next = before + replacement + after;
+    const next = joinWithSmartSpace(before, replacement, after);
 
     setText(next);
     setFindings([]);
@@ -433,7 +465,11 @@ export default function Page() {
     setCopyEnabled(true);
     setBlockedMessage(null);
 
-    scheduleAnalyze(next);
+    // NEW: run exactly one analysis after applying replacement (to catch sentence-level issues),
+    // then lock to prevent spam until user edits again.
+    forcedAnalyzeOnceRef.current = true;
+    analyze(next);
+    setLocked(true);
   }
 
   function keepReplace() {
@@ -442,6 +478,9 @@ export default function Page() {
     );
     setCopyEnabled(false);
     setActiveId(null);
+
+    // NEW: lock after decision
+    setLocked(true);
   }
 
   function acceptAvoid() {
@@ -450,12 +489,18 @@ export default function Page() {
     setCopyEnabled(false);
     setBlockedMessage(null);
     setActiveId(null);
+
+    // NEW: lock after decision
+    setLocked(true);
   }
 
   function rejectAvoid() {
     setBlockedMessage("This wording may unintentionally exclude or stereotype some people. We recommend revising or avoiding it.");
     setCopyEnabled(false);
     setActiveId(null);
+
+    // NEW: lock after decision
+    setLocked(true);
   }
 
   const popupStyle = useMemo(() => {
@@ -493,7 +538,7 @@ export default function Page() {
     } catch {}
   }
 
-    // iOS / mobile keyboard: real viewport height -> CSS var
+  // iOS / mobile keyboard: real viewport height -> CSS var
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -516,7 +561,6 @@ export default function Page() {
       window.visualViewport?.removeEventListener("scroll", setAppH);
     };
   }, []);
-
 
   return (
     <div className="page">
@@ -560,48 +604,86 @@ export default function Page() {
         .copyBtn img{width:22px;height:22px;display:block;}
         .copyDisabled{opacity:.35;cursor:not-allowed;}
 
-        /* ------------------------------
-           MOBILE OVERRIDES (desktop-safe)
-        ------------------------------ */
-        @media (max-width: 768px){
-          .page{ overflow-y:auto; min-height: var(--app-h, 100dvh); }
-          .container{ padding: 18px 16px 28px; }
-          
+/* -------------------------------------------------------
+   MOBILE TYPO + EDITOR POLISH (desktop unchanged)
+------------------------------------------------------- */
+@media (max-width: 560px){
+  .container{
+    padding: 18px 22px 22px; /* mobilde daha dengeli */
+  }
 
-          .hero{ margin-top: 10px; }
-          .title{
-            font-size: clamp(34px, 9vw, 46px);
-            margin: 16px 0 0;
-          }
-          .subtitle{
-            font-size: clamp(18px, 4.6vw, 22px);
-            margin-top: 12px;
-            line-height: 1.25;
-          }
+  /* TYPO */
+  .title{
+    font-size: 48px;
+    line-height: 1.02;
+    letter-spacing: -0.3px;
+    margin-top: 26px; /* başlığı biraz aşağı oturt */
+  }
 
-          .editorWrap{
-            max-width: 100%;
-            margin-top: 16px;
-          }
+  .subtitle{
+    font-size: 24px;
+    line-height: 1.28;
+    margin-top: 14px;
+    max-width: 520px;
+  }
 
-          .display{
-            font-size: 18px;
-            line-height: 1.35;
-          }
-          textarea.input{
-            font-size: 18px;
-            line-height: 1.35;
-            textarea.input{ min-height: calc(var(--app-h, 100dvh) * 0.38); }
+  /* EDITOR */
+  .editorWrap{
+    margin-top: 18px;
+    max-width: 100%;
+  }
 
-          }
+  /* Display layer + textarea aynı font-size olmalı */
+  .display{
+    font-size: 24px;
+    line-height: 1.35;
+  }
 
-          .copyBtn{
-            position: static;
-            width: 100%;
-            height: 42px;
-            margin-top: 10px;
-            border-top: 1px solid rgba(0,0,0,0.12);
-          }
+  textarea.input{
+    font-size: 24px;
+    line-height: 1.35;
+    min-height: 84px;          /* mobilde yazma alanı biraz daha rahat */
+    padding-right: 64px;       /* copy butona yer aç */
+  }
+
+  /* Placeholder ayrı: 18px */
+  textarea.input::placeholder{
+    font-size: 18px;
+    line-height: 1.25;
+    opacity: 0.45;
+  }
+
+  /* Baseline spacing */
+  .baseline{
+    margin-top: 12px;
+  }
+
+  /* COPY BUTTON - mobilde daha “buton gibi” ve düzgün konum */
+  .copyBtn{
+    right: 6px;
+    bottom: -46px;             /* senin “aşağıda kalması” hoşuna gitti, ama hizayı iyileştiriyoruz */
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid rgba(17,17,17,0.18);
+    background: rgba(255,255,255,0.35);
+    backdrop-filter: blur(6px);
+    opacity: 1;
+  }
+
+  .copyBtn img{
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Blocked msg mobil okunurluk */
+  .blockedMsg{
+    font-size: 14px;
+    line-height: 1.35;
+    margin-top: 14px;
+    max-width: 520px;
+  }
+}
 
           .baseline{ margin-top: 12px; }
 
@@ -664,10 +746,7 @@ export default function Page() {
 
         <div className="editorWrap" ref={wrapRef}>
           {active && (
-            <div
-              className={`popup ${isMobile ? "popupSheet" : ""}`}
-              style={isMobile ? undefined : (popupStyle as any)}
-            >
+            <div className={`popup ${isMobile ? "popupSheet" : ""}`} style={isMobile ? undefined : (popupStyle as any)}>
               <div className="popupTop">
                 <div className="popupWord">
                   {active.message ||
@@ -705,7 +784,9 @@ export default function Page() {
                 </div>
               )}
 
-              {active.type === "avoid" && <div className="popupMsg">{active.message}</div>}
+              {active.type === "avoid" && (
+                <div className="popupMsg">Inclusive language focuses on ability and behavior, not gender.</div>
+              )}
 
               {!isMobile && <div className="popupArrow" />}
             </div>
@@ -717,7 +798,7 @@ export default function Page() {
             <textarea
               className="input"
               value={text}
-                            onFocus={() => {
+              onFocus={() => {
                 // On mobile: keep editor visible when keyboard opens
                 if (typeof window === "undefined") return;
                 if (!isMobile) return;
@@ -726,10 +807,12 @@ export default function Page() {
                   typeLineRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
                 }, 150);
               }}
-
               onChange={(e) => {
                 const next = e.target.value;
                 const prev = lastTextRef.current;
+
+                // NEW: user started editing again -> unlock analysis
+                if (locked) setLocked(false);
 
                 setText(next);
 

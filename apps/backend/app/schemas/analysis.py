@@ -6,6 +6,27 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
+
+class EditSpan(BaseModel):
+    start: int = Field(..., ge=0)
+    end: int = Field(..., ge=0)
+    replacement: str
+
+class UIStrings(BaseModel):
+    message: str
+    change_label: str = "Change"
+    keep_label: str = "Keep"
+
+class AnalysisResponse(BaseModel):
+    severity: Literal["none", "low", "medium", "high"]
+    type: Literal["none", "term_replacement", "sentence_rewrite"]
+    reason: Optional[str] = None
+    edits: List[EditSpan] = Field(default_factory=list)
+    suggested_text: Optional[str] = None  # sadece sentence_rewrite için
+    ui: Optional[UIStrings] = None
+
 
 Severity = Literal["block", "warn", "info"]
 ItemType = Literal["slur", "stereotype", "exclusion", "hate", "other"]
