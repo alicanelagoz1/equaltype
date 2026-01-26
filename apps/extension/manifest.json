@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "EqualType",
+  "version": "0.2.0",
+  "description": "Inclusive language assistant (LLM-powered).",
+  "action": {
+    "default_title": "EqualType"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://equaltype.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

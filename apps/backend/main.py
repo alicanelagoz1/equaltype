@@ -1,4 +1,4 @@
-# /Users/aliced/equaltype/apps/backend/main.py
+# apps/backend/main.py
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 
 # -----------------------------------------------------------------------------
 # Paths + Python path
