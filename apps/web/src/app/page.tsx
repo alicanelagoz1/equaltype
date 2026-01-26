@@ -888,7 +888,8 @@ export default function Page() {
               )}
 
               {active.type === "avoid" && (
-                <div className="inlineMsg">Inclusive language focuses on ability and behavior, not gender.</div>
+                <div className="inlineMsg">Inclusive language aims to avoid excluding or stereotyping people based on identity, background, or personal characteristics.
+</div>
               )}
             </div>
           )}
