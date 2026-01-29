@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Header from "./components/Header";
+import { trackEvent } from "@/lib/powermove";
 
 type UIFinding = {
   id: string;
@@ -37,33 +38,63 @@ function escapeAttr(s: string) {
   return s.replaceAll('"', "&quot;");
 }
 
-function buildHighlightedHTML(text: string, findings: UIFinding[]) {
-  if (!findings?.length) return escapeHTML(text).replace(/\n/g, "<br/>");
+function buildHighlightedHTML(
+  text: string,
+  findings: UIFinding[],
+  goodSpan: { start: number; end: number } | null
+) {
+  // no findings + no goodSpan
+  if ((!findings?.length || findings.length === 0) && !goodSpan) {
+    return escapeHTML(text).replace(/\n/g, "<br/>");
+  }
 
-  const sorted = [...findings].sort((a, b) => a.start - b.start || b.end - a.end);
+  type Span =
+    | ({ kind: "finding" } & UIFinding)
+    | { kind: "good"; id: string; start: number; end: number };
 
-  // remove overlaps (keep earliest; our prioritize step handles avoid dominance)
-  const cleaned: UIFinding[] = [];
+  const spans: Span[] = [];
+
+  if (Array.isArray(findings) && findings.length) {
+    spans.push(...findings.map((f) => ({ ...f, kind: "finding" as const })));
+  }
+
+  if (goodSpan && goodSpan.end > goodSpan.start) {
+    spans.push({ kind: "good", id: "good_0", start: goodSpan.start, end: goodSpan.end });
+  }
+
+  // sort then remove overlaps (findings dominate)
+  spans.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const cleaned: Span[] = [];
   let lastEnd = -1;
-  for (const f of sorted) {
-    if (f.start < lastEnd) continue;
-    cleaned.push(f);
-    lastEnd = f.end;
+
+  for (const s of spans) {
+    if (s.start < lastEnd) {
+      if (s.kind === "good") continue;
+      continue;
+    }
+    cleaned.push(s);
+    lastEnd = s.end;
   }
 
   let out = "";
   let cursor = 0;
 
-  for (const f of cleaned) {
-    const start = clamp(f.start, 0, text.length);
-    const end = clamp(f.end, 0, text.length);
+  for (const s of cleaned) {
+    const start = clamp(s.start, 0, text.length);
+    const end = clamp(s.end, 0, text.length);
 
     if (start > cursor) out += escapeHTML(text.slice(cursor, start));
 
     const raw = text.slice(start, end);
-    const shown = f.type === "replace" ? (f.mask ?? raw) : raw;
 
-    out += `<mark data-id="${escapeAttr(f.id)}" class="et_mark">${escapeHTML(shown)}</mark>`;
+    if (s.kind === "good") {
+      out += `<mark data-id="${escapeAttr(s.id)}" class="et_good">${escapeHTML(raw)}</mark>`;
+    } else {
+      const shown = s.type === "replace" ? (s.mask ?? raw) : raw;
+      out += `<mark data-id="${escapeAttr(s.id)}" class="et_mark">${escapeHTML(shown)}</mark>`;
+    }
+
     cursor = end;
   }
 
@@ -127,13 +158,11 @@ function prioritizeAvoid(findings: UIFinding[]) {
   });
 }
 
-// Heuristic: backend may mislabel sentence-level issues as "replace".
-// If span looks sentence-like AND no usable replacement exists, treat it as "avoid".
 function looksLikeSentenceSpan(original: string, spanLen: number) {
   const o = (original || "").trim();
   if (!o) return false;
-  if (o.includes(" ")) return true; // phrases/sentences contain spaces
-  if (spanLen >= 20) return true; // long spans are likely sentence-level
+  if (o.includes(" ")) return true;
+  if (spanLen >= 20) return true;
   if (/[.!?]/.test(o)) return true;
   return false;
 }
@@ -270,6 +299,13 @@ export default function Page() {
   // NEW: lock prevents recursive re-analysis after user makes a decision
   const [locked, setLocked] = useState<boolean>(false);
 
+  // ✅ NEW: success line (check + message)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // ✅ NEW: green highlight span after accepted replace
+  const [goodSpan, setGoodSpan] = useState<{ start: number; end: number } | null>(null);
+  const goodSpanTimerRef = useRef<number | null>(null);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const displayRef = useRef<HTMLDivElement | null>(null);
   const typeLineRef = useRef<HTMLDivElement | null>(null);
@@ -296,6 +332,23 @@ export default function Page() {
     return () => mq.removeEventListener?.("change", apply);
   }, []);
 
+  // Power Move: page view
+  useEffect(() => {
+    trackEvent("page_view");
+  }, []);
+
+  function showSuccess(msg = "You’re communicating thoughtfully. Well done.") {
+    setSuccessMessage(msg);
+    // auto-hide after a moment (optional)
+    window.setTimeout(() => setSuccessMessage(null), 2600);
+  }
+
+  function setGoodSpanTemp(span: { start: number; end: number }) {
+    setGoodSpan(span);
+    if (goodSpanTimerRef.current) window.clearTimeout(goodSpanTimerRef.current);
+    goodSpanTimerRef.current = window.setTimeout(() => setGoodSpan(null), 1800);
+  }
+
   function scheduleAnalyze(input: string) {
     if (locked) return;
 
@@ -312,7 +365,7 @@ export default function Page() {
   }
 
   const active = useMemo(() => findings.find((f) => f.id === activeId) || null, [findings, activeId]);
-  const highlightedHTML = useMemo(() => buildHighlightedHTML(text, findings), [text, findings]);
+  const highlightedHTML = useMemo(() => buildHighlightedHTML(text, findings, goodSpan), [text, findings, goodSpan]);
 
   async function analyze(input: string) {
     if (locked && !forcedAnalyzeOnceRef.current) return;
@@ -324,6 +377,8 @@ export default function Page() {
       setActiveId(null);
       setCopyEnabled(false);
       setBlockedMessage(null);
+      setSuccessMessage(null);
+      setGoodSpan(null);
       return;
     }
 
@@ -332,6 +387,9 @@ export default function Page() {
       window.clearTimeout(maxWaitRef.current);
       maxWaitRef.current = null;
     }
+
+    // Power Move: analysis started
+    trackEvent("analysis_started", { text_length: input.length });
 
     try {
       const res = await fetch(`${apiBase}/api/analyze`, {
@@ -355,10 +413,23 @@ export default function Page() {
         setActiveId(null);
         setCopyEnabled(false);
         setBlockedMessage(`Backend error (${res.status}). ${raw?.slice(0, 240) || "No response body"}`);
+        setSuccessMessage(null);
+
+        // Power Move: analysis failed (backend)
+        trackEvent("analysis_failed", { text_length: input.length, status: res.status });
+
         return;
       }
 
       const mapped = mapAnyBackendToUI(data, input);
+
+      // Power Move: analysis completed (mapped)
+      trackEvent("analysis_completed", {
+        text_length: input.length,
+        copy_enabled: mapped.copy_enabled,
+        flag_count: mapped.uiFindings?.length ?? 0,
+        has_avoid: (mapped.uiFindings || []).some((f: any) => f.type === "avoid"),
+      });
 
       // 1) If backend mislabeled sentence-level spans as replace, coerce them to avoid
       const normalized = coerceSentenceAvoid(mapped.uiFindings);
@@ -369,37 +440,56 @@ export default function Page() {
       setFindings(prio);
       setCopyEnabled(mapped.copy_enabled);
 
+      // Power Move: flagged event
+      if (prio.length > 0) {
+        trackEvent("flagged_discriminative", {
+          flag_count: prio.length,
+          has_avoid: prio.some((f) => f.type === "avoid"),
+          has_replace: prio.some((f) => f.type === "replace"),
+        });
+      }
+
+      // ✅ show success if clean & copy enabled
+      if (prio.length === 0 && mapped.copy_enabled) {
+        setBlockedMessage(null);
+        showSuccess("You’re communicating thoughtfully. Well done.");
+      } else {
+        setSuccessMessage(null);
+      }
+
       if (mapped.popup_message) {
         setBlockedMessage(mapped.popup_message);
       } else if (!prio.length && mapped.copy_enabled === false) {
         setBlockedMessage("This wording may unintentionally exclude or stereotype some people. We recommend revising it.");
-      } else if (prio.length === 0) {
-        if (mapped.copy_enabled) setBlockedMessage(null);
       }
     } catch (e: any) {
       setFindings([]);
       setActiveId(null);
       setCopyEnabled(false);
       setBlockedMessage(`Request failed: ${e?.message || String(e)}`);
+      setSuccessMessage(null);
+
+      // Power Move: analysis failed (network/runtime)
+      trackEvent("analysis_failed", { text_length: input.length, error: e?.message || String(e) });
     } finally {
-      // if we used the forced path once, consume it
       if (forcedAnalyzeOnceRef.current) forcedAnalyzeOnceRef.current = false;
     }
   }
 
   // Auto-open the most important finding:
-  // prefer avoid (sentence-level), otherwise replace
   useEffect(() => {
     if (activeId) return;
     if (!findings.length) return;
 
-    const candidate = findings.find((f) => f.type === "avoid") || findings.find((f) => f.type === "replace") || findings[0];
+    const candidate =
+      findings.find((f) => f.type === "avoid") ||
+      findings.find((f) => f.type === "replace") ||
+      findings[0];
 
     if (candidate) setActiveId(candidate.id);
   }, [findings, activeId]);
 
   // Compute popup anchor (position above the highlighted span)
-  // Desktop uses anchored popup. Mobile no longer uses popup.
   useEffect(() => {
     if (!activeId) return;
     if (isMobile) return;
@@ -424,18 +514,15 @@ export default function Page() {
 
   // NEW: smart single-space join so replacement doesn't stick to next word
   function joinWithSmartSpace(before: string, replacement: string, after: string) {
-    const rep = replacement; // caller already trims
+    const rep = replacement;
     if (!rep) return before + after;
 
-    // If after begins with whitespace or punctuation, do not add space
     const afterFirst = after.slice(0, 1);
     const afterStartsSpace = /^\s$/.test(afterFirst) || after.startsWith("\n") || after.startsWith("\t");
     const afterStartsPunct = /^[,.;:!?)]$/.test(afterFirst);
 
-    // If replacement already ends with whitespace, do not add
     const repEndsSpace = /\s$/.test(rep);
 
-    // Add exactly one space if: replacement ends with a word char AND after starts with a word char (and no space already)
     const repEndsWord = /[A-Za-z0-9)]$/.test(rep);
     const afterStartsWord = /^[A-Za-z0-9(]$/.test(afterFirst);
 
@@ -452,12 +539,25 @@ export default function Page() {
       setBlockedMessage("No safe replacement suggestion is available for this term yet.");
       setCopyEnabled(false);
       setActiveId(null);
+      setSuccessMessage(null);
       return;
     }
+
+    // Power Move: suggestion accepted (replace)
+    trackEvent("suggestion_accepted", {
+      type: "replace",
+      original_length: (f.original || "").length,
+      replacement_length: replacement.length,
+    });
 
     const before = text.slice(0, f.start);
     const after = text.slice(f.end);
     const next = joinWithSmartSpace(before, replacement, after);
+
+    // ✅ mark the newly inserted replacement as green for a moment
+    const repStart = before.length;
+    const repEnd = before.length + replacement.length;
+    setGoodSpanTemp({ start: repStart, end: repEnd });
 
     setText(next);
     setFindings([]);
@@ -465,48 +565,64 @@ export default function Page() {
     setCopyEnabled(true);
     setBlockedMessage(null);
 
-    // NEW: run exactly one analysis after applying replacement (to catch sentence-level issues),
-    // then lock to prevent spam until user edits again.
+    // ✅ success reinforcement
+    showSuccess("You’re communicating thoughtfully. Well done.");
+
     forcedAnalyzeOnceRef.current = true;
     analyze(next);
     setLocked(true);
   }
 
   function keepReplace() {
+    // Power Move: suggestion rejected (replace)
+    trackEvent("suggestion_rejected", { type: "replace" });
+
     setBlockedMessage(
       "This word has a long history of harm and exclusion. For this reason, it cannot be copied or used in this context. We strongly suggest revising it for inclusive language."
     );
     setCopyEnabled(false);
     setActiveId(null);
 
-    // NEW: lock after decision
+    setSuccessMessage(null);
+    setGoodSpan(null);
+
     setLocked(true);
   }
 
   function acceptAvoid() {
+    // Power Move: suggestion accepted (avoid)
+    trackEvent("suggestion_accepted", { type: "avoid" });
+
     setText("");
     setFindings([]);
     setCopyEnabled(false);
     setBlockedMessage(null);
     setActiveId(null);
 
-    // NEW: lock after decision
+    // ✅ success reinforcement for removing harmful sentence
+    showSuccess("You’re communicating thoughtfully. Well done.");
+
+    setGoodSpan(null);
     setLocked(true);
   }
 
   function rejectAvoid() {
+    // Power Move: suggestion rejected (avoid)
+    trackEvent("suggestion_rejected", { type: "avoid" });
+
     setBlockedMessage("This wording may unintentionally exclude or stereotype some people. We recommend revising or avoiding it.");
     setCopyEnabled(false);
     setActiveId(null);
 
-    // NEW: lock after decision
+    setSuccessMessage(null);
+    setGoodSpan(null);
+
     setLocked(true);
   }
 
   const popupStyle = useMemo(() => {
     if (!active) return { display: "none" as const };
-    if (isMobile) return { display: "none" as const }; // mobile popup disabled
-
+    if (isMobile) return { display: "none" as const };
     if (!anchor) return { display: "none" as const };
 
     const bubbleW = 360;
@@ -529,6 +645,9 @@ export default function Page() {
   }, [anchor, active, isMobile]);
 
   async function onCopy() {
+    // Power Move: copy clicked
+    trackEvent("copy_clicked", { text_length: text.length, copy_enabled: copyEnabled });
+
     try {
       await navigator.clipboard.writeText(text);
     } catch {}
@@ -584,6 +703,9 @@ export default function Page() {
         mark.et_mark{background:transparent;color:${UNDERLINE_RED};position:relative;padding:0 1px;font-weight:400;}
         mark.et_mark::after{content:"";position:absolute;left:0;right:0;top:52%;height:3px;background:${UNDERLINE_RED};transform:translateY(-50%);}
 
+        /* ✅ NEW: accepted replacement highlight */
+        mark.et_good{background:transparent;color:${BRAND_GREEN};font-weight:700;padding:0 1px;}
+
         .popup{background:#fff;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:14px;z-index:20;}
         .popupArrow{position:absolute;left:var(--arrow-left,22px);bottom:-10px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:10px solid #fff;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.08));}
 
@@ -599,6 +721,23 @@ export default function Page() {
         .copyBtn{position:absolute;right:0;bottom:-40px;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:transparent;cursor:pointer;opacity:.9;}
         .copyBtn img{width:22px;height:22px;display:block;}
         .copyDisabled{opacity:.35;cursor:not-allowed;}
+
+        /* ✅ NEW: success row */
+        .successRow{
+          margin-top: 14px;
+          display:flex;
+          align-items:center;
+          gap: 12px;
+          font-family:"Hanken Grotesk",system-ui,-apple-system,Segoe UI,Arial;
+          font-size: 28px;
+          font-weight: 600;
+          color: ${BRAND_GREEN};
+        }
+        .successRow img{
+          width: 44px;
+          height: 44px;
+          display:block;
+        }
 
         /* Inline result panel (mobile only) */
         .inlinePanel{
@@ -724,6 +863,16 @@ export default function Page() {
             width: 50%;
             padding: 12px 10px;
           }
+
+          /* Success row size on mobile */
+          .successRow{
+            font-size: 22px;
+            line-height: 1.25;
+          }
+          .successRow img{
+            width: 34px;
+            height: 34px;
+          }
         }
       `}</style>
 
@@ -781,7 +930,9 @@ export default function Page() {
               )}
 
               {active.type === "avoid" && (
-                <div className="popupMsg">Inclusive language focuses on ability and behavior, not gender.</div>
+                <div className="popupMsg">
+                  This sentence may exclude or stereotype a group of people. Consider revising it to be more inclusive.
+                </div>
               )}
 
               <div className="popupArrow" />
@@ -811,11 +962,21 @@ export default function Page() {
 
                 setText(next);
 
+                // Power Move: first character typed/pasted
+                if (next.length > 0 && prev.length === 0) {
+                  trackEvent("text_started", { text_length: next.length });
+                }
+
+                // clear success as user edits; it'll come back when clean
+                if (successMessage) setSuccessMessage(null);
+
                 if (!next.trim()) {
                   setFindings([]);
                   setActiveId(null);
                   setCopyEnabled(false);
                   setBlockedMessage(null);
+                  setSuccessMessage(null);
+                  setGoodSpan(null);
                   lastTextRef.current = next;
                   return;
                 }
@@ -846,6 +1007,9 @@ export default function Page() {
 
             <div className="baseline" />
           </div>
+
+          {/* ✅ NEW: success row (desktop + mobile) */}
+          {successMessage && <div className="successRow"><img src="/check.svg" alt="" />{successMessage}</div>}
 
           {/* MOBILE ONLY: inline result panel under the editor */}
           {isMobile && active && (
@@ -888,8 +1052,9 @@ export default function Page() {
               )}
 
               {active.type === "avoid" && (
-                <div className="inlineMsg">Inclusive language aims to avoid excluding or stereotyping people based on identity, background, or personal characteristics.
-</div>
+                <div className="inlineMsg">
+                  This sentence may exclude or stereotype a group of people. Consider rephrasing it in a more inclusive way.
+                </div>
               )}
             </div>
           )}

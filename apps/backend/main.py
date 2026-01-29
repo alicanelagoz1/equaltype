@@ -45,8 +45,28 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------------------------------
+# DB init (import AFTER dotenv)
+# -----------------------------------------------------------------------------
+_db_init_error = None
+try:
+    from app.db import Base, engine  # noqa: E402
+except Exception as e:
+    Base = None  # type: ignore
+    engine = None  # type: ignore
+    _db_init_error = repr(e)
+
+if Base is not None and engine is not None:
+
+    @app.on_event("startup")
+    def _startup_create_tables():
+        # Minimal & safe: create tables if they don't exist
+        Base.metadata.create_all(bind=engine)
+
+
+# -----------------------------------------------------------------------------
 # Routers (import AFTER dotenv)
 # -----------------------------------------------------------------------------
+# Existing API router (keep as-is)
 try:
     from app.api.routes import router as api_router  # noqa: E402
 except Exception as e:
@@ -58,6 +78,28 @@ else:
 
 if api_router is not None:
     app.include_router(api_router, prefix="/api")
+
+# New: Power Move routers (events + summary)
+_events_router_import_error = None
+_powermove_router_import_error = None
+
+try:
+    from app.routes.events import router as events_router  # noqa: E402
+except Exception as e:
+    events_router = None
+    _events_router_import_error = repr(e)
+
+try:
+    from app.routes.powermove import router as powermove_router  # noqa: E402
+except Exception as e:
+    powermove_router = None
+    _powermove_router_import_error = repr(e)
+
+if events_router is not None:
+    app.include_router(events_router, prefix="/api", tags=["events"])
+
+if powermove_router is not None:
+    app.include_router(powermove_router, prefix="/api", tags=["powermove"])
 
 
 # -----------------------------------------------------------------------------
@@ -74,6 +116,8 @@ def health():
 @app.get("/debug/runtime")
 def debug_runtime():
     key = os.getenv("OPENAI_API_KEY")
+    db_url = os.getenv("DATABASE_URL")
+
     return {
         "main_file": __file__,
         "cwd": os.getcwd(),
@@ -82,6 +126,11 @@ def debug_runtime():
         "env_exists": ENV_PATH.exists(),
         "openai_key_present": key is not None,
         "openai_key_len": 0 if key is None else len(key),
+        "database_url_present": db_url is not None,
+        "database_url_len": 0 if db_url is None else len(db_url),
         "router_import_error": _router_import_error,
+        "events_router_import_error": _events_router_import_error,
+        "powermove_router_import_error": _powermove_router_import_error,
+        "db_init_error": _db_init_error,
         "pythonpath_has_basedir": str(BASE_DIR) in sys.path,
     }
